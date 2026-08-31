@@ -85,6 +85,14 @@ export default function App() {
         </div>
       </header>
 
+      <div style={styles.hero} aria-hidden="false">
+        <img
+          src="/hero.png"
+          alt="3D ribbon illustration of a folded protein with beta sheets and alpha helices in purple beside a DNA double helix with two base pairs highlighted in glowing pink to indicate a missense variant"
+          style={styles.heroImage}
+        />
+      </div>
+
       {modelNotReleased && (
         <div style={styles.banner} role="alert" aria-live="polite">
           <strong>Model not yet released — abstaining.</strong> The backend release gate is closed
@@ -232,6 +240,8 @@ const styles: Record<string, React.CSSProperties> = {
   subtitle: { margin: "4px 0 0", color: "#475569", fontSize: 13 },
   healthBadge: { fontSize: 13, background: "#f1f5f9", padding: "6px 12px", borderRadius: 999, border: "1px solid #e2e8f0" },
   banner: { maxWidth: 980, margin: "16px auto 0", background: "#fef3c7", border: "1px solid #fcd34d", padding: "12px 16px", borderRadius: 8, fontSize: 13, color: "#78350f" },
+  hero: { maxWidth: 980, margin: "0 auto", padding: "18px 16px 0" },
+  heroImage: { width: "100%", maxHeight: 320, objectFit: "contain", display: "block", borderRadius: 12, background: "white", border: "1px solid #e2e8f0" },
   main: { maxWidth: 980, margin: "20px auto", padding: "0 16px", display: "flex", flexDirection: "column", gap: 18 },
   card: { background: "white", border: "1px solid #e2e8f0", borderRadius: 12, padding: 20, boxShadow: "0 1px 2px rgba(0,0,0,0.04)" },
   cardTitle: { margin: "0 0 6px", fontSize: 16, color: "#0f172a" },
