@@ -128,7 +128,7 @@ export default function App() {
           <section style={styles.card}>
             <h3 style={styles.cardTitle}>Result: {result.variant}</h3>
             <div style={styles.scoreRow}>
-              <div style={styles.scoreCircle(result.score)}>{result.score.toFixed(3)}</div>
+              <div style={scoreCircleStyle(result.score)}>{result.score.toFixed(3)}</div>
               <div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: result.label === "damaging" ? "#b91c1c" : "#15803d" }}>
                   {result.label.toUpperCase()}
@@ -137,7 +137,7 @@ export default function App() {
                   Score in [0,1]; threshold 0.5. Model rev: {result.model_revision}
                 </div>
                 <div style={styles.barWrap}>
-                  <div style={styles.barFill(result.score)} />
+                  <div style={barFillStyle(result.score)} />
                 </div>
               </div>
             </div>
@@ -228,23 +228,27 @@ const styles: Record<string, React.CSSProperties> = {
   list: { fontSize: 13, lineHeight: 1.6, color: "#334155", paddingLeft: 18 },
   small: { fontSize: 12, color: "#94a3b8" },
   footer: { textAlign: "center", padding: "18px 0 28px", fontSize: 12, color: "#94a3b8" },
-} as Record<string, React.CSSProperties & Record<string, unknown>>;
+};
 
-// helpers for dynamic styles
-(styles as Record<string, unknown>).scoreCircle = (s: number) => ({
-  width: 72,
-  height: 72,
-  borderRadius: "50%",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontWeight: 800,
-  fontSize: 16,
-  color: "white",
-  background: s >= 0.5 ? (s > 0.75 ? "#991b1b" : "#dc2626") : s > 0.3 ? "#a16207" : "#15803d",
-});
-(styles as Record<string, unknown>).barFill = (s: number) => ({
-  width: `${Math.round(s * 100)}%`,
-  height: "100%",
-  background: s >= 0.5 ? "#dc2626" : "#16a34a",
-});
+function scoreCircleStyle(s: number): React.CSSProperties {
+  return {
+    width: 72,
+    height: 72,
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 800,
+    fontSize: 16,
+    color: "white",
+    background: s >= 0.5 ? (s > 0.75 ? "#991b1b" : "#dc2626") : s > 0.3 ? "#a16207" : "#15803d",
+  };
+}
+
+function barFillStyle(s: number): React.CSSProperties {
+  return {
+    width: `${Math.round(s * 100)}%`,
+    height: "100%",
+    background: s >= 0.5 ? "#dc2626" : "#16a34a",
+  };
+}

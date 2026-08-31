@@ -12,7 +12,9 @@ export interface PredictResponse {
   model_revision: string;
 }
 
-const BASE = import.meta.env.VITE_API_BASE || "";
+// Vite exposes env via import.meta.env; VITE_API_URL is preferred, VITE_API_BASE is deprecated alias
+const _env = (import.meta as unknown as { env: Record<string, string | undefined> }).env;
+const BASE = _env.VITE_API_URL || _env.VITE_API_BASE || "";
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch(`${BASE}/health`);

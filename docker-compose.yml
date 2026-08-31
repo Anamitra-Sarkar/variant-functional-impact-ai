@@ -1,0 +1,26 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # Release gate — fail-closed by default. OFF is the safe documented default for dev.
+      # Set to "true" AND set APPROVED_ARTIFACT_REVISION to a non-empty value to enable predictions.
+      MODEL_RELEASE_APPROVED: "false"
+      APPROVED_ARTIFACT_REVISION: ""
+      # Path inside container where model artifact is expected (when gate is approved)
+      MODEL_ARTIFACT_PATH: "artifacts/model.pkl"
+      # Firebase service account JSON path — leave empty for permissive dev auth
+      FIREBASE_SERVICE_ACCOUNT_JSON: ""
+    volumes:
+      # Mount artifacts for local dev if you have a trained model artifact
+      - ./artifacts:/app/artifacts
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').getcode()==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
