@@ -45,29 +45,80 @@ class ResidueFeatures:
 
 
 def parse_structure(structure_path: str | Path):
-    """Parse PDB or mmCIF file using Bio.PDB. Returns Bio.PDB Structure object."""
+    """Parse PDB or mmCIF file using Bio.PDB. Returns Bio.PDB Structure object.
+
+    Handles real-file quirks:
+    - Detects mmCIF by suffix .cif/.mmcif (also .CIF case-insensitive)
+    - PDBParser is tolerant to missing optional columns (occupancy/B-factor/element)
+      and multiple header variants (HEADER, TITLE, REMARK, etc. are ignored by Biopython)
+    - Supports .ent (PDB flatfile alternative suffix)
+    - Validates file is non-empty; raises informative error if no atoms parsed
+    """
     if not BIOPDB_AVAILABLE:
         raise ImportError("biopython not installed; pip install biopython")
     path = Path(structure_path)
     if not path.exists():
         raise FileNotFoundError(f"Structure file not found: {path}")
+    if path.stat().st_size == 0:
+        raise ValueError(f"Structure file is empty: {path}")
     suffix = path.suffix.lower()
-    if suffix in (".cif", ".mmcif"):
+    # Also handle .ent (common PDB mirror suffix) and compressed-like names
+    if suffix in (".cif", ".mmcif", ".ent"):
+        # .ent files are PDB format, not CIF
+        is_cif = suffix in (".cif", ".mmcif")
+    else:
+        is_cif = suffix in (".cif", ".mmcif")
+        # Fallback heuristic: inspect first non-comment line for mmCIF keyword
+        if not is_cif:
+            try:
+                with open(path, encoding="utf-8", errors="ignore") as fh:
+                    for line in fh:
+                        s = line.strip()
+                        if not s or s.startswith("#"):
+                            continue
+                        if s.startswith("data_") or s.startswith("_entry."):
+                            is_cif = True
+                        break
+            except Exception:
+                pass
+    if is_cif:
         parser = MMCIFParser(QUIET=True)
     else:
         parser = PDBParser(QUIET=True)
-    structure = parser.get_structure("protein", str(path))
+    try:
+        structure = parser.get_structure("protein", str(path))
+    except Exception as e:
+        raise ValueError(f"Failed to parse structure file {path}: {e}") from e
+    # Validate at least one model with content
+    if len(list(structure)) == 0:
+        raise ValueError(f"No models found in structure file: {path}")
     return structure
 
 
 def _get_ca_atoms(structure) -> list:
-    """Collect all CA atoms with their residue info."""
+    """Collect all CA atoms with their residue info (first model only).
+
+    Filters:
+    - Only standard residues (residue.id[0] == ' ') – excludes hetero/water (HETATM)
+    - Requires CA atom present; handles altloc implicitly via Biopython's default
+    - Preserves insertion code info: residue.id = (hetfield, resseq, icode); we key by
+      (chain.id, resseq) so insertion variants at same resseq are treated as one
+      (first encountered). This matches DSSP's resseq-centric lookup.
+    """
     cas = []
     for model in structure:
         for chain in model:
             for residue in chain:
-                if "CA" in residue:
-                    cas.append((chain.id, residue.id[1], residue.resname, residue["CA"].get_coord(), residue))
+                # Skip hetero residues / water (hetfield != ' ')
+                if residue.id[0] != " ":
+                    continue
+                if "CA" not in residue:
+                    continue
+                try:
+                    coord = residue["CA"].get_coord()
+                except Exception:
+                    continue
+                cas.append((chain.id, residue.id[1], residue.resname, coord, residue))
         break  # only first model
     return cas
 
@@ -82,9 +133,16 @@ def compute_rsa_proxy(structure_path: str | Path, radius: float = 10.0, max_neig
     Production DSSP path would use actual SASA via DSSP.
 
     Returns dict keyed by (chain_id, resseq).
+    Raises ValueError if structure has no CA atoms (e.g. hetero-only file).
     """
+    if radius <= 0:
+        raise ValueError(f"radius must be >0, got {radius}")
+    if max_neighbors <= 0:
+        raise ValueError(f"max_neighbors must be >0, got {max_neighbors}")
     structure = parse_structure(structure_path)
     cas = _get_ca_atoms(structure)
+    if not cas:
+        raise ValueError(f"No CA atoms found in structure file: {structure_path} (empty or hetero-only)")
     result: Dict[Tuple[str, int], ResidueFeatures] = {}
     for idx, (chain_id, resseq, resname, coord, _res) in enumerate(cas):
         count = 0
@@ -96,9 +154,8 @@ def compute_rsa_proxy(structure_path: str | Path, radius: float = 10.0, max_neig
                 count += 1
         burial = min(count / max_neighbors, 1.0) if max_neighbors > 0 else 0.0
         rsa = 1.0 - burial
-        # Simple SS proxy: use local CA-CA distances to distinguish compact (helix/sheet) vs loop
-        # This is intentionally simplistic and documented as proxy.
-        # For production, DSSP is the real path.
+        # Clamp to [0,1] defensively
+        rsa = max(0.0, min(1.0, rsa))
         result[(chain_id, resseq)] = ResidueFeatures(
             chain_id=chain_id,
             resseq=resseq,
@@ -123,9 +180,12 @@ def compute_ss_proxy(structure_path: str | Path) -> Dict[Tuple[str, int], str]:
 
     Returns dict (chain_id, resseq) -> 'H'|'E'|'C'.
     Production path uses DSSP 8-state -> 3-state.
+    Raises ValueError if no CA atoms found.
     """
     structure = parse_structure(structure_path)
     cas = _get_ca_atoms(structure)
+    if not cas:
+        raise ValueError(f"No CA atoms found in structure file: {structure_path}")
     # Group by chain
     from collections import defaultdict
     by_chain: Dict[str, list] = defaultdict(list)
@@ -166,11 +226,16 @@ def compute_features(structure_path: str | Path, use_dssp: bool = False, dssp_ex
       DSSP returns ASA; RSA = ASA / MAX_ASA[aa]. SS 8-state -> 3-state.
     Proxy path (sandbox):
       neighbor-count RSA + geometric SS proxy.
+    Raises ValueError if no CA atoms found.
     """
     if use_dssp and BIOPDB_AVAILABLE:
         try:
             structure = parse_structure(structure_path)
-            model = next(iter(structure))
+            # Ensure at least one model with content
+            try:
+                model = next(iter(structure))
+            except StopIteration:
+                raise ValueError(f"No models in structure: {structure_path}")
             dssp = DSSP(model, str(structure_path), dssp=dssp_executable)
             # dssp keys: (chain_id, (resseq, icode))
             result: Dict[Tuple[str, int], ResidueFeatures] = {}
@@ -194,6 +259,7 @@ def compute_features(structure_path: str | Path, use_dssp: bool = False, dssp_ex
                     ss3 = "C"
                 max_asa = MAX_ASA_TIEN.get(aa, 150.0)
                 rsa = min(asa / max_asa, 1.0) if max_asa else 0.0
+                rsa = max(0.0, min(1.0, rsa))
                 coord = cas.get((chain_id, resseq), (0, 0, 0))
                 # 3-letter resname not directly available; use aa
                 result[(chain_id, resseq)] = ResidueFeatures(
@@ -208,7 +274,10 @@ def compute_features(structure_path: str | Path, use_dssp: bool = False, dssp_ex
             if result:
                 return result
         except Exception as e:
-            # Fall through to proxy
+            # Fall through to proxy – log but do not hide programming errors for empty files
+            msg = str(e)
+            if "No CA atoms" in msg or "No models" in msg or "empty" in msg.lower():
+                raise
             print(f"DSSP failed ({e}), falling back to geometric proxy")
             pass
 
@@ -218,9 +287,20 @@ def compute_features(structure_path: str | Path, use_dssp: bool = False, dssp_ex
     for key, ss in ss_dict.items():
         if key in rsa_dict:
             rsa_dict[key].ss = ss
+    if not rsa_dict:
+        raise ValueError(f"No residues with features computed for {structure_path}")
     return rsa_dict
 
 
 def get_residue_feature(features: Dict[Tuple[str, int], ResidueFeatures], chain_id: str, position: int) -> Optional[ResidueFeatures]:
-    """Lookup by chain and 1-indexed position."""
-    return features.get((chain_id, position))
+    """Lookup by chain and 1-indexed position. Chain lookup is case-sensitive (PDB convention); also tries upper."""
+    if not isinstance(position, int) or position < 1:
+        raise ValueError(f"position must be integer >=1, got {position}")
+    if not chain_id or not isinstance(chain_id, str):
+        raise ValueError(f"chain_id must be non-empty string, got {chain_id!r}")
+    feat = features.get((chain_id, position))
+    if feat is None and chain_id.upper() != chain_id:
+        feat = features.get((chain_id.upper(), position))
+    if feat is None and chain_id.lower() != chain_id:
+        feat = features.get((chain_id.lower(), position))
+    return feat

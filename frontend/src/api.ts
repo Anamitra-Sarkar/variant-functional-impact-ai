@@ -36,7 +36,21 @@ export async function predictVariant(payload: {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(body.detail || `Predict failed: ${res.status}`);
+    let msg: string;
+    if (Array.isArray(body.detail)) {
+      // Pydantic validation error list
+      msg = body.detail.map((d: { msg?: string; loc?: unknown }) => d.msg || JSON.stringify(d)).join("; ");
+    } else if (typeof body.detail === "string") {
+      msg = body.detail;
+    } else if (body.detail) {
+      msg = JSON.stringify(body.detail);
+    } else {
+      msg = `Predict failed: ${res.status} ${res.statusText}`;
+    }
+    // Include status for caller to distinguish 503 abstention
+    const err = new Error(msg) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }

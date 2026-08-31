@@ -25,10 +25,11 @@ data_pipeline/
   (`mkdssp` binary) on real PDB/AlphaFold structures. Sandbox proxy: neighbor-count
   burial estimate (counts CA neighbors within 10 Å, maps to 0..1 burial fraction,
   then RSA = 1 - burial). Real geometric computation, documented DSSP alternative.
+  Parser hardened for real-file quirks: empty file, hetero-only, missing CA, insertion codes, multiple models, header/comment variants, optional PDB columns (B-factor/occupancy) tolerance.
 - **Secondary structure** — DSSP 8-state → 3-state (H helix, E sheet, C loop) when
   DSSP available; proxy uses backbone geometry heuristics (CA-CA-CA angle / hydrogen-bond
   proxy is not attempted; we use a documented simplified rule: local CA distance pattern,
-  clearly labeled as proxy).
+  clearly labeled as proxy). Proxy hardened for single-residue chains and multi-chain grouping.
 - **Stability proxy** — Δvolume, Δhydrophobicity, Grantham-like distance between WT and mutant
   residues using real per-AA tables. No learned energy function; honest physicochemical delta.
 
@@ -36,7 +37,7 @@ data_pipeline/
 - Real Shannon-entropy and information-content scoring from MSA.
 - Input: FASTA MSA file (orthologs/paralogs). Per-column entropy:
   `H = -Σ p_a * log2(p_a)`, conservation = `1 - H / log2(20)` or `IC = log2(20) - H`.
-  Implemented for real given an input alignment file.
+  Implemented for real given an input alignment file. Parser hardened for real MSA quirks: comment lines (`;`, `#`), leading-whitespace headers, empty headers (auto-named), spaced alignments, lower-case sequences, blank lines, empty-sequence detection, differing-length validation with header detail, ambiguous AA (`B/Z/X/*`) ignored, both gap chars (`-`, `.`).
 
 **Fusion model:**
 - LogisticRegression (L2) or GradientBoosting (sklearn). Features: RSA, SS one-hot,
@@ -48,18 +49,22 @@ data_pipeline/
 ```
 backend/
   __init__.py
-  app.py        # FastAPI app factory
+  app.py        # FastAPI app factory (lifespan, CORS, fail-closed gate)
   model_store.py # Fail-closed release gate
   auth.py       # Firebase-auth-shaped bearer token stub
-  schemas.py    # Pydantic request/response models
+  schemas.py    # Pydantic request/response models with strict validators
 ```
 
 **Release gate (fail-closed):**
 - Model artifacts are NOT loaded/served unless BOTH env vars are set:
   `MODEL_RELEASE_APPROVED=true` AND `APPROVED_ARTIFACT_REVISION=<non-empty>`.
 - `GET /health` always returns 200 with `model_loaded: bool`.
-- `GET /readiness` returns 200 if loaded, 503 if not.
+- `GET /readiness` returns 200 if loaded, 503 if not (JSON body still honest).
+- `GET /model/info` returns `model_loaded`, `model_revision`, `feature_names` (when loaded).
+- `GET /` returns service identity + `model_loaded` flag.
 - `POST /predict` returns 503 with honest "model not released" if gate closed.
+- `POST /predict` validates input strictly via Pydantic: `wt`/`mut` must be canonical 20 AAs (422), `wt != mut` (422), `chain` single alphanumeric (422), `protein` alphanumeric/underscore/dash (422), `position` 1..100000 (422). Malformed JSON returns 422, synonymous `wt==mut` returns 422, invalid AA returns 422 (never 500).
+- CORS middleware enabled for frontend dev origins; startup uses `lifespan` (not deprecated `on_event`).
 - Frontend shows abstention banner when backend reports `model_loaded=false`.
 
 **Auth stub:**
@@ -73,29 +78,29 @@ backend/
 ```
 frontend/
   src/
-    App.tsx
-    api.ts
-    components/VariantForm.tsx
-    components/ScoreCard.tsx
-    components/ReleaseBanner.tsx
+    App.tsx        # Main dashboard: form, health banner, score display (accessible)
+    api.ts         # fetchHealth / predictVariant (handles 422 detail arrays + 503)
+    main.tsx
   index.html
   vite.config.ts
   package.json
   tsconfig.json
 ```
 
-- Variant input: protein (UniProt ID / gene), position (1-indexed), WT, mutant.
-- Displays: damaging score + per-feature explanation (RSA, conservation, Δphyschem).
-- Honest banner when `model_loaded=false`.
+- Variant input: protein (UniProt ID / gene), position (1-indexed), WT, mutant, chain.
+- All form controls have associated `<label htmlFor>` + `id`, `aria-label`, `aria-required`, `aria-live` regions for errors/results, `role="alert"` on banners, `role="progressbar"` for score bar, skip-link for keyboard navigation.
+- Responsive: `flex-wrap` + `@media (max-width: 640px)` stacks rows vertically; works at 320px narrow widths.
+- Color contrast hardened: health/banner/error text uses darker ratios (e.g. `#166534`, `#78350f`, `#7f1d1d`) on light backgrounds.
+- Displays: damaging score + per-feature explanation (RSA, conservation, Δphyschem) with `aria-label` on score circle and `aria-valuenow` on progress bar.
+- 503 abstention handling: frontend detects 503 / "not yet released" message and shows dedicated abstention error rather than generic failure.
+- Honest banner (`role="alert"`) when `model_loaded=false`.
 - Clean scientific-dashboard design (no generic boilerplate).
 
 ### 4. `tests/` — pytest
 
-- Synthetic tiny PDB fixture (hand-written, hand-verifiable geometry).
-- Synthetic FASTA MSA fixture (conserved vs variable columns).
-- Checks: RSA correctness, SS correctness, physicochemical table correctness,
-  conservation scoring (conserved > variable), fusion model recovers injected signal,
-  backend release gate, auth stub.
+- Synthetic tiny PDB fixture (hand-written, hand-verifiable geometry) covering multiple header variants, missing optional columns, comment lines, insertion codes, empty file, hetero-only edge cases.
+- Synthetic FASTA MSA fixture (conserved vs variable columns) covering comment lines (`;`, `#`), leading-whitespace headers, empty headers, spaced/ lower-case sequences, differing-length error, empty-file error, ambiguous AA (`B/Z/X/*`) handling, gap chars (`-` and `.`), multi-line sequences.
+- Checks: RSA correctness, SS correctness (including single-residue and multi-chain), physicochemical table correctness (including Grantham ordering), conservation scoring (conserved > variable, gap/ambiguous handling), fusion model recovers injected signal, backend release gate (health/readiness/503, CORS, lifespan, 422/400 validation, corrupted artifact handling, `/model/info`), auth stub, CLI variant parsing edge cases.
 
 ## Data flow
 
