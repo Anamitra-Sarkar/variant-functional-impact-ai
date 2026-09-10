@@ -100,6 +100,7 @@ export default function App() {
           <img
             src="/hero.png"
             alt="3D ribbon illustration of a folded protein with beta sheets and alpha helices in purple beside a DNA double helix with two base pairs highlighted in glowing pink to indicate a missense variant"
+            style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", borderRadius: 18, border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 24px 60px rgba(0,0,0,0.5)", display: "block" }}
           />
         </figure>
       </section>
