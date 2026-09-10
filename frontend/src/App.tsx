@@ -40,7 +40,7 @@ export default function App() {
       // Enhance 503 abstention messaging
       const status = (err as { status?: number })?.status;
       if (status === 503 || msg.toLowerCase().includes("not yet released")) {
-        setError("Model not yet released — abstaining. The backend release gate is closed; predictions are disabled until an approved artifact is released.");
+        setError("This prediction isn't available yet — our team is finishing validation before enabling live results.");
       } else {
         setError(msg);
       }
@@ -65,38 +65,66 @@ export default function App() {
         .skip-link:focus { left: 12px !important; top: 12px !important; width: auto !important; height: auto !important; overflow: visible !important; }
       `}</style>
       <a href="#main-content" className="skip-link" style={styles.skipLink}>Skip to main content</a>
-      <header style={styles.header} role="banner">
-        <div style={styles.headerInner}>
-          <div>
-            <h1 style={styles.title}>Variant Impact</h1>
-            <p style={styles.subtitle}>Structure/evolution-aware missense scoring — per-variant damaging prediction</p>
-          </div>
-          <div style={styles.healthBadge} role="status" aria-live="polite" aria-label="Model health status" className="vi-health">
-            {healthError ? (
-              <span style={{ color: "#991b1b" }}>Health: unreachable — backend not reachable</span>
-            ) : health ? (
-              <span style={{ color: health.model_loaded ? "#166534" : "#92400e" }}>
-                Model: {health.model_loaded ? `loaded (rev ${health.model_revision})` : "not yet released"}
-              </span>
-            ) : (
-              <span>Checking model…</span>
-            )}
-          </div>
-        </div>
-      </header>
 
-      <div style={styles.hero} aria-hidden="false">
-        <img
-          src="/hero.png"
-          alt="3D ribbon illustration of a folded protein with beta sheets and alpha helices in purple beside a DNA double helix with two base pairs highlighted in glowing pink to indicate a missense variant"
-          style={styles.heroImage}
-        />
-      </div>
+      <nav style={styles.navbar}>
+        <div style={styles.brand}>
+          <span style={styles.brandMark}>VI</span>
+          <span style={styles.brandName}>Variant Impact</span>
+        </div>
+        <div role="status" aria-live="polite" aria-label="Model health status" className="vi-health" style={styles.healthBadge}>
+          {healthError ? (
+            <span style={{ color: "#f87171" }}>Not available</span>
+          ) : health ? (
+            <span style={{ color: health.model_loaded ? "#6fcf97" : "#c4bce0" }}>
+              {health.model_loaded ? "Live predictions" : "Preview mode"}
+            </span>
+          ) : (
+            <span>Checking…</span>
+          )}
+        </div>
+      </nav>
+
+      <section style={styles.heroSection}>
+        <div style={styles.heroCopy}>
+          <div style={styles.eyebrow}>Missense variant scoring</div>
+          <h1 style={styles.heroTitle}>
+            Score a mutation, <em style={styles.heroEm}>see the reasoning.</em>
+          </h1>
+          <p style={styles.lede}>
+            Variant Impact estimates how damaging a single amino-acid change is likely to be, by combining a
+            protein's own structure with how conserved that position is across evolution — every score comes with
+            the evidence behind it.
+          </p>
+        </div>
+        <figure style={styles.heroVisual}>
+          <img
+            src="/hero.png"
+            alt="3D ribbon illustration of a folded protein with beta sheets and alpha helices in purple beside a DNA double helix with two base pairs highlighted in glowing pink to indicate a missense variant"
+          />
+        </figure>
+      </section>
+
+      <section style={styles.featureGrid}>
+        <div style={styles.featureCard}>
+          <span style={styles.featureIndex}>01</span>
+          <h3 style={styles.featureTitle}>Structure-aware</h3>
+          <p style={styles.featureText}>Reads real protein structure to judge whether a position is buried or exposed.</p>
+        </div>
+        <div style={styles.featureCard}>
+          <span style={styles.featureIndex}>02</span>
+          <h3 style={styles.featureTitle}>Evolution-informed</h3>
+          <p style={styles.featureText}>Weighs how conserved a position is across related proteins throughout evolution.</p>
+        </div>
+        <div style={styles.featureCard}>
+          <span style={styles.featureIndex}>03</span>
+          <h3 style={styles.featureTitle}>Fully explained</h3>
+          <p style={styles.featureText}>Every score comes with the individual factors that contributed to it.</p>
+        </div>
+      </section>
 
       {modelNotReleased && (
         <div style={styles.banner} role="alert" aria-live="polite">
-          <strong>Model not yet released — abstaining.</strong> The backend release gate is closed
-          (<code>MODEL_RELEASE_APPROVED</code> / <code>APPROVED_ARTIFACT_REVISION</code> not set). Predictions will return 503 until an approved artifact is released. This is honest abstention, not a silent fallback.
+          <strong>Predictions aren't available yet.</strong> Our team is finishing validation before enabling live results.
         </div>
       )}
 
@@ -104,8 +132,7 @@ export default function App() {
         <section style={styles.card} aria-labelledby="score-heading">
           <h2 id="score-heading" style={styles.cardTitle}>Score a missense variant</h2>
           <p style={styles.cardDesc}>
-            Enter protein, position (1-indexed), wild-type and mutant residues. The model combines solvent accessibility (RSA),
-            conservation (MSA entropy), and physicochemical deltas into a damaging score.
+            Enter a protein, position, and the original and new amino acid to see how damaging that change is likely to be, and why.
           </p>
           <form onSubmit={onPredict} style={styles.form} noValidate aria-describedby="form-help">
             <p id="form-help" style={{ position: "absolute", left: "-10000px", width: 1, height: 1, overflow: "hidden" }}>
@@ -194,24 +221,20 @@ export default function App() {
           <h3 style={styles.cardTitle}>How it works</h3>
           <ul style={styles.list}>
             <li>
-              <strong>Structural context:</strong> RSA and secondary structure from DSSP (or geometric neighbor-count proxy in sandbox) via{" "}
-              <code>Bio.PDB</code> on real PDB/AlphaFold structures.
+              <strong>Structural context:</strong> how buried or exposed the position is within the protein's real 3D structure.
             </li>
             <li>
-              <strong>Evolutionary conservation:</strong> Shannon-entropy information content from a real MSA FASTA.
+              <strong>Evolutionary conservation:</strong> how consistently that position is preserved across related proteins.
             </li>
             <li>
-              <strong>Physicochemical deltas:</strong> real Kyte-Doolittle, vdW volumes, Grantham distance, BLOSUM62.
+              <strong>Physicochemical change:</strong> how different the original and new amino acids are in size, charge, and chemistry.
             </li>
             <li>
-              <strong>Fusion:</strong> logistic regression combining all features; evaluated AUROC/AUPRC vs single-feature baselines.
-            </li>
-            <li>
-              <strong>Real-run:</strong> <code>python -m data_pipeline.cli --structure-path &lt;file&gt; --msa-path &lt;file&gt; --predict --variant P53_R175H</code>
+              <strong>Combined scoring:</strong> all factors are weighed together into a single damaging-likelihood score.
             </li>
           </ul>
           <p style={styles.small}>
-            Data sources: RCSB PDB, AlphaFold DB, DSSP, ClinVar, phyloP/phastCons — see <code>docs/data_sources.md</code>.
+            Built on real protein structure and evolutionary conservation data from public research databases.
           </p>
         </section>
       </main>
@@ -233,38 +256,61 @@ function Feature({ label, value, hint }: { label: string; value: unknown; hint?:
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { fontFamily: "Inter, system-ui, -apple-system, sans-serif", background: "#f8fafc", minHeight: "100vh", color: "#0f172a" },
-  header: { background: "white", borderBottom: "1px solid #e2e8f0", padding: "18px 24px" },
-  headerInner: { maxWidth: 980, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" },
+  page: {
+    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+    background:
+      "linear-gradient(rgba(14,11,33,0.92), rgba(14,11,33,0.97)), url('/hero.png')",
+    backgroundSize: "cover",
+    backgroundPosition: "top center",
+    backgroundAttachment: "fixed",
+    minHeight: "100vh",
+    color: "#f1eefc",
+  },
+  navbar: { maxWidth: 980, margin: "0 auto", padding: "24px 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center" },
+  brand: { display: "flex", alignItems: "center", gap: 10 },
+  brandMark: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 9, background: "linear-gradient(135deg, #a78bfa, #4c1d95)", color: "white", fontWeight: 700, fontSize: 13 },
+  brandName: { fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 18 },
+  heroSection: { maxWidth: 980, margin: "0 auto", padding: "32px 20px 40px", display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 40, alignItems: "center" },
+  heroCopy: {},
+  eyebrow: { textTransform: "uppercase", letterSpacing: "0.14em", fontSize: 12, fontWeight: 700, color: "#a78bfa", marginBottom: 14 },
+  heroTitle: { fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 32, lineHeight: 1.15, margin: "0 0 18px" },
+  heroEm: { fontStyle: "italic", color: "#a78bfa" },
+  lede: { color: "#c4bce0", fontSize: 16, lineHeight: 1.6, maxWidth: 480, margin: 0 },
+  heroVisual: { margin: 0 },
+  featureGrid: { maxWidth: 980, margin: "0 auto 32px", padding: "0 20px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18 },
+  featureCard: { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14, padding: 22 },
+  featureIndex: { display: "block", fontFamily: "'Fraunces', serif", fontSize: 13, color: "#a78bfa", marginBottom: 8 },
+  featureTitle: { fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 16, margin: "0 0 8px" },
+  featureText: { color: "#c4bce0", fontSize: 13, lineHeight: 1.55, margin: 0 },
   title: { margin: 0, fontSize: 22, letterSpacing: -0.5 },
   subtitle: { margin: "4px 0 0", color: "#475569", fontSize: 13 },
-  healthBadge: { fontSize: 13, background: "#f1f5f9", padding: "6px 12px", borderRadius: 999, border: "1px solid #e2e8f0" },
-  banner: { maxWidth: 980, margin: "16px auto 0", background: "#fef3c7", border: "1px solid #fcd34d", padding: "12px 16px", borderRadius: 8, fontSize: 13, color: "#78350f" },
+  healthBadge: { fontSize: 13, background: "rgba(255,255,255,0.06)", padding: "6px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)" },
+  banner: { maxWidth: 980, margin: "0 auto 20px", background: "rgba(217,175,86,0.1)", border: "1px solid rgba(217,175,86,0.5)", padding: "12px 16px", borderRadius: 8, fontSize: 13, color: "#f1eefc" },
   hero: { maxWidth: 980, margin: "0 auto", padding: "18px 16px 0" },
   heroImage: { width: "100%", maxHeight: 320, objectFit: "contain", display: "block", borderRadius: 12, background: "white", border: "1px solid #e2e8f0" },
-  main: { maxWidth: 980, margin: "20px auto", padding: "0 16px", display: "flex", flexDirection: "column", gap: 18 },
-  card: { background: "white", border: "1px solid #e2e8f0", borderRadius: 12, padding: 20, boxShadow: "0 1px 2px rgba(0,0,0,0.04)" },
-  cardTitle: { margin: "0 0 6px", fontSize: 16, color: "#0f172a" },
-  cardDesc: { margin: "0 0 14px", color: "#475569", fontSize: 13, lineHeight: 1.5 },
+  main: { maxWidth: 980, margin: "0 auto 20px", padding: "0 20px", display: "flex", flexDirection: "column", gap: 18 },
+  card: { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: 20 },
+  cardTitle: { margin: "0 0 6px", fontSize: 16, color: "#f1eefc", fontFamily: "'Fraunces', serif", fontWeight: 600 },
+  cardDesc: { margin: "0 0 14px", color: "#c4bce0", fontSize: 13, lineHeight: 1.5 },
   form: { display: "flex", flexDirection: "column", gap: 12 },
   row: { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" },
-  label: { display: "flex", flexDirection: "column", gap: 4, fontSize: 12, fontWeight: 600, color: "#1e293b" },
-  input: { padding: "8px 10px", borderRadius: 8, border: "1px solid #94a3b8", fontSize: 14, minWidth: 80, color: "#0f172a", background: "white" },
-  button: { background: "#0f172a", color: "white", border: "none", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: "pointer" },
-  example: { fontSize: 12, color: "#64748b" },
-  error: { background: "#fef2f2", border: "1px solid #fecaca", color: "#7f1d1d", padding: "10px 12px", borderRadius: 8, fontSize: 13 },
+  label: { display: "flex", flexDirection: "column", gap: 4, fontSize: 12, fontWeight: 600, color: "#f1eefc" },
+  input: { padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", fontSize: 14, minWidth: 80, color: "#f1eefc", background: "rgba(0,0,0,0.2)" },
+  button: { background: "#a78bfa", color: "#1a1332", border: "none", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: "pointer" },
+  example: { fontSize: 12, color: "#8b81ab" },
+  error: { background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.4)", color: "#fecaca", padding: "10px 12px", borderRadius: 8, fontSize: 13 },
   scoreRow: { display: "flex", gap: 18, alignItems: "center", marginTop: 8, flexWrap: "wrap" },
   subhead: { margin: "18px 0 8px", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, color: "#334155" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 },
-  featureCell: { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 12px" },
-  featureLabel: { fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: 0.4 },
-  featureValue: { fontSize: 18, fontWeight: 700, marginTop: 2, color: "#0f172a" },
-  featureHint: { fontSize: 11, color: "#64748b", marginTop: 2 },
+  featureCell: { background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "10px 12px" },
+  featureLabel: { fontSize: 11, fontWeight: 700, color: "#c4bce0", textTransform: "uppercase", letterSpacing: 0.4 },
+  featureValue: { fontSize: 18, fontWeight: 700, marginTop: 2, color: "#f1eefc" },
+  featureHint: { fontSize: 11, color: "#8b81ab", marginTop: 2 },
   barWrap: { width: 200, height: 8, background: "#e2e8f0", borderRadius: 999, marginTop: 6, overflow: "hidden" },
-  note: { fontSize: 12, color: "#475569", fontStyle: "italic", marginTop: 10 },
-  list: { fontSize: 13, lineHeight: 1.6, color: "#334155", paddingLeft: 18 },
-  small: { fontSize: 12, color: "#64748b" },
-  footer: { textAlign: "center", padding: "18px 0 28px", fontSize: 12, color: "#64748b" },
+  note: { fontSize: 12, color: "#c4bce0", fontStyle: "italic", marginTop: 10 },
+  list: { fontSize: 13, lineHeight: 1.6, color: "#c4bce0", paddingLeft: 18 },
+  small: { fontSize: 12, color: "#8b81ab" },
+  footer: { textAlign: "center", padding: "18px 0 28px", fontSize: 12, color: "#8b81ab" },
   skipLink: { position: "absolute", left: "-10000px", top: "auto", width: 1, height: 1, overflow: "hidden", background: "#0f172a", color: "white", padding: "8px 12px", borderRadius: 6, zIndex: 1000 } as React.CSSProperties,
 };
 
