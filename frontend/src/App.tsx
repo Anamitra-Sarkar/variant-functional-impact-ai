@@ -54,6 +54,10 @@ export default function App() {
   return (
     <div style={styles.page}>
       <style>{`
+        @media (max-width: 800px) {
+          .vi-hero { grid-template-columns: 1fr !important; }
+          .vi-features { grid-template-columns: 1fr !important; }
+        }
         @media (max-width: 640px) {
           .vi-row { flex-direction: column !important; align-items: stretch !important; }
           .vi-row label { width: 100% !important; }
@@ -84,7 +88,7 @@ export default function App() {
         </div>
       </nav>
 
-      <section style={styles.heroSection}>
+      <section className="vi-hero" style={styles.heroSection}>
         <div style={styles.heroCopy}>
           <div style={styles.eyebrow}>Missense variant scoring</div>
           <h1 style={styles.heroTitle}>
@@ -105,7 +109,7 @@ export default function App() {
         </figure>
       </section>
 
-      <section style={styles.featureGrid}>
+      <section className="vi-features" style={styles.featureGrid}>
         <div style={styles.featureCard}>
           <span style={styles.featureIndex}>01</span>
           <h3 style={styles.featureTitle}>Structure-aware</h3>
