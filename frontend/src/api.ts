@@ -12,9 +12,12 @@ export interface PredictResponse {
   model_revision: string;
 }
 
+// Default backend host (Hugging Face Space). Env vars override at build time.
+const DEFAULT_API = "https://bhumika-tewari-282006-variant-functional-impact-ai-api.hf.space";
+
 // Vite exposes env via import.meta.env; VITE_API_URL is preferred, VITE_API_BASE is deprecated alias
 const _env = (import.meta as unknown as { env: Record<string, string | undefined> }).env;
-const BASE = _env.VITE_API_URL || _env.VITE_API_BASE || "";
+const BASE = (_env.VITE_API_URL || _env.VITE_API_BASE || DEFAULT_API).replace(/\/$/, "");
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch(`${BASE}/health`);
@@ -47,7 +50,7 @@ export async function predictVariant(payload: {
     } else {
       msg = `Predict failed: ${res.status} ${res.statusText}`;
     }
-    // Include status for caller to distinguish 503 abstention
+    // Include status for caller to distinguish abstention
     const err = new Error(msg) as Error & { status?: number };
     err.status = res.status;
     throw err;
