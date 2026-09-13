@@ -127,10 +127,19 @@ for gene, uniprot in GENE_PANEL.items():
         continue
     pdb_path = struct_dir / f"{uniprot}.pdb"
     if not pdb_path.exists():
-        url = f"https://alphafold.ebi.ac.uk/files/AF-{uniprot}-F1-model_v4.pdb"
-        r = requests.get(url, timeout=120)
-        if r.status_code != 200:
+        # AlphaFold DB versions its files (v4 at doc-writing time, v6 as of this
+        # run) -- resolve the current pdbUrl from the prediction API instead of
+        # hardcoding a version that goes stale.
+        api_r = requests.get(f"https://alphafold.ebi.ac.uk/api/prediction/{uniprot}", timeout=60)
+        pdb_url = None
+        if api_r.status_code == 200 and api_r.json():
+            pdb_url = api_r.json()[0].get("pdbUrl")
+        if not pdb_url:
             print(f"  [warn] no AlphaFold structure for {gene} ({uniprot})", flush=True)
+            continue
+        r = requests.get(pdb_url, timeout=120)
+        if r.status_code != 200:
+            print(f"  [warn] AlphaFold fetch failed for {gene} ({uniprot}): {r.status_code}", flush=True)
             continue
         pdb_path.write_bytes(r.content)
     try:
